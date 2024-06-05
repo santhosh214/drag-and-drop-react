@@ -139,23 +139,30 @@ function ResponsiveDrawer(props) {
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
-        const imageNode = {
-          id: `image-${new Date().getTime()}`,
-          type: "img",
-          data: {
-            src: reader.result,
-            width: 300,
-            height: 300,
-          },
-          position: {
-            x: 100,
-            y: 100,
-          },
-          draggable: false,
-          selectable: false,
+        const img = new Image();
+        img.src = reader.result;
+        img.onload = () => {
+          const imageNode = {
+            id: `image-${new Date().getTime()}`,
+            type: "img",
+            data: {
+              src: reader.result,
+              width: img.width,
+              height: img.height,
+            },
+            position: {
+              x: 100,
+              y: 100,
+            },
+            draggable: false,
+            selectable: false,
+          };
+          setNodes((nds) => insertNode(imageNode, nds));
+          setIsImageUploaded(true); // Set image uploaded status to true
         };
-        setNodes((nds) => insertNode(imageNode, nds));
-        setIsImageUploaded(true); // Set image uploaded status to true
+        img.onerror = (error) => {
+          console.error("Error loading image:", error);
+        };
       };
       reader.onerror = (error) => {
         console.error("Error reading file:", error);
@@ -186,7 +193,6 @@ function ResponsiveDrawer(props) {
       };
       setNodes((nds) => insertNode(newNode, nds));
     }
-    console.log(offset);
   };
 
   const handleNodeDragStop = (event, node) => {
