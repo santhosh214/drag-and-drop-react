@@ -29,9 +29,10 @@ import ReactFlow, {
   useReactFlow,
 } from "react-flow-renderer";
 
-import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { DndProvider, DragPreviewImage, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { ListItemText } from "@mui/material";
+import html2canvas from "html2canvas";
 
 const drawerWidth = 240;
 
@@ -74,24 +75,45 @@ const ItemTypes = {
 };
 
 const DraggableListItem = ({ icon, type, isImageUploaded }) => {
-  const [, drag] = useDrag(
+  const dragRef = React.useRef(null);
+  const [preview, setPreview] = React.useState(null);
+
+  const [{ isDragging }, drag, previewRef] = useDrag(
     () => ({
       type: ItemTypes.DEVICE,
       item: { type, icon },
       canDrag: isImageUploaded,
+      collect: (monitor) => ({
+        isDragging: monitor.isDragging(),
+      }),
     }),
     [isImageUploaded]
   );
 
+  React.useEffect(() => {
+    if (isImageUploaded && dragRef.current) {
+      html2canvas(dragRef.current, { backgroundColor: null }).then((canvas) => {
+        setPreview(canvas.toDataURL());
+      });
+    }
+  }, [icon, type, isImageUploaded]);
+
   return (
-    <ListItem disablePadding ref={drag}>
-      <ListItemButton>
-        <ListItemIcon>
-          {React.createElement(icon, { fontSize: "inherit" })}
-        </ListItemIcon>
-        <ListItemText primary={type} />
-      </ListItemButton>
-    </ListItem>
+    <>
+      {isImageUploaded && preview && (
+        <DragPreviewImage connect={previewRef} src={preview} />
+      )}
+      <div ref={dragRef} style={{ display: "inline-block" }}>
+        <ListItem disablePadding ref={drag}>
+          <ListItemButton>
+            <ListItemIcon>
+              {React.createElement(icon, { fontSize: "inherit" })}
+            </ListItemIcon>
+            <ListItemText primary={type} />
+          </ListItemButton>
+        </ListItem>
+      </div>
+    </>
   );
 };
 
@@ -112,6 +134,8 @@ function ResponsiveDrawer(props) {
   );
   const [isImageUploaded, setIsImageUploaded] = React.useState(false);
   const reactFlowInstance = useReactFlow();
+
+  const reactFlowWrapper = React.useRef(null);
 
   React.useEffect(() => {
     const handleResize = () => {
@@ -174,11 +198,18 @@ function ResponsiveDrawer(props) {
   const handleDrop = (item, monitor) => {
     const offset = monitor.getClientOffset();
 
-    if (offset) {
-      const reactFlowBounds = reactFlowInstance.project({
-        x: offset.x - drawerWidth - 350,
-        y: offset.y - 80,
-      });
+    if (offset && reactFlowWrapper.current) {
+      // Get bounding rect of ReactFlow wrapper to correctly project coordinates
+      const boundingRect = reactFlowWrapper.current.getBoundingClientRect();
+
+      // Get the current zoom and pan values
+      const { x: panX, y: panY, zoom } = reactFlowInstance.toObject().viewport;
+
+      // Translate screen coordinates to canvas coordinates accounting for zoom and pan
+      const reactFlowBounds = {
+        x: (offset.x - boundingRect.left - panX) / zoom,
+        y: (offset.y - boundingRect.top - panY) / zoom,
+      };
 
       const newNode = {
         id: `device-${new Date().getTime()}`,
@@ -188,9 +219,13 @@ function ResponsiveDrawer(props) {
           width: 30,
           height: 30,
         },
-        position: reactFlowBounds,
+        position: {
+          x: reactFlowBounds.x - 180,
+          y: reactFlowBounds.y + 100,
+        },
         draggable: true,
       };
+
       setNodes((nds) => insertNode(newNode, nds));
     }
   };
@@ -388,7 +423,15 @@ function ResponsiveDrawer(props) {
         <Toolbar />
         <ReactFlowProvider>
           <div
-            ref={isImageUploaded ? drop : null} // Apply drop ref only if image is uploaded
+            id="reactflow-wrapper"
+            ref={
+              isImageUploaded
+                ? (el) => {
+                    reactFlowWrapper.current = el;
+                    drop(el);
+                  }
+                : reactFlowWrapper
+            }
             style={{
               height: canvasHeight,
               width: "100%",
