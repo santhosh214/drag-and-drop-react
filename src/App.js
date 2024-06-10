@@ -29,7 +29,7 @@ import ReactFlow, {
   useReactFlow,
 } from "react-flow-renderer";
 
-import { DndProvider, DragPreviewImage, useDrag, useDrop } from "react-dnd";
+import { DndProvider, useDrag, useDrop, DragPreviewImage } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { ListItemText } from "@mui/material";
 import html2canvas from "html2canvas";
@@ -48,18 +48,20 @@ const ImageNode = ({ data }) => {
 
 // Custom node component to render icons
 const IconNode = ({ data }) => {
-  const { icon: IconComponent, width, height } = data;
+  const { icon: IconComponent, width, height, type } = data;
   return (
     <div
       style={{
         width,
         height,
         display: "flex",
-        justifyContent: "center",
+        flexDirection: "column",
         alignItems: "center",
+        justifyContent: "center",
       }}
     >
       <IconComponent style={{ fontSize: "2rem" }} />
+      <Typography variant="caption">{type}</Typography>
     </div>
   );
 };
@@ -81,7 +83,7 @@ const DraggableListItem = ({ icon, type, isImageUploaded }) => {
   const [{ isDragging }, drag, previewRef] = useDrag(
     () => ({
       type: ItemTypes.DEVICE,
-      item: { type, icon },
+      item: { type, icon }, // Include the type here
       canDrag: isImageUploaded,
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
@@ -199,29 +201,25 @@ function ResponsiveDrawer(props) {
     const offset = monitor.getClientOffset();
 
     if (offset && reactFlowWrapper.current) {
-      // Get bounding rect of ReactFlow wrapper to correctly project coordinates
       const boundingRect = reactFlowWrapper.current.getBoundingClientRect();
 
-      // Get the current zoom and pan values
-      const { x: panX, y: panY, zoom } = reactFlowInstance.toObject().viewport;
-
-      // Translate screen coordinates to canvas coordinates accounting for zoom and pan
-      const reactFlowBounds = {
-        x: (offset.x - boundingRect.left - panX) / zoom,
-        y: (offset.y - boundingRect.top - panY) / zoom,
-      };
+      const reactFlowBounds = reactFlowInstance.project({
+        x: offset.x - boundingRect.left - 180,
+        y: offset.y - boundingRect.top + 100,
+      });
 
       const newNode = {
         id: `device-${new Date().getTime()}`,
         type: "icon",
         data: {
           icon: item.icon,
-          width: 30,
-          height: 30,
+          width: 60,
+          height: 60,
+          type: item.type, // Add the type (name) to the node data
         },
         position: {
-          x: reactFlowBounds.x - 180,
-          y: reactFlowBounds.y + 100,
+          x: reactFlowBounds.x,
+          y: reactFlowBounds.y,
         },
         draggable: true,
       };
