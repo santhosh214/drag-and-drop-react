@@ -1,4 +1,4 @@
-import * as React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
@@ -31,16 +31,19 @@ import ReactFlow, {
 
 import { DndProvider, useDrag, useDrop, DragPreviewImage } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { ListItemText } from "@mui/material";
+import { ListItemText, TextField } from "@mui/material";
 import html2canvas from "html2canvas";
 
 const drawerWidth = 240;
 
 // Custom node component to render images
 const ImageNode = ({ data }) => {
-  const { src, width, height } = data;
+  const { src, width, height, onClick } = data;
   return (
-    <div style={{ width: width, height: height }}>
+    <div
+      style={{ width: width, height: height }}
+      onClick={onClick} // Ensure the onClick handler is applied here
+    >
       <img src={src} alt="uploaded" style={{ width: "100%", height: "100%" }} />
     </div>
   );
@@ -48,7 +51,7 @@ const ImageNode = ({ data }) => {
 
 // Custom node component to render icons
 const IconNode = ({ data }) => {
-  const { icon: IconComponent, width, height, type } = data;
+  const { icon: IconComponent, width, height, type, onClick } = data; // Include onClick in data
   return (
     <div
       style={{
@@ -58,7 +61,9 @@ const IconNode = ({ data }) => {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
+        cursor: "pointer",
       }}
+      onClick={onClick} // Ensure the onClick handler is applied here
     >
       <IconComponent style={{ fontSize: "2rem" }} />
       <Typography variant="caption">{type}</Typography>
@@ -77,8 +82,8 @@ const ItemTypes = {
 };
 
 const DraggableListItem = ({ icon, type, isImageUploaded }) => {
-  const dragRef = React.useRef(null);
-  const [preview, setPreview] = React.useState(null);
+  const dragRef = useRef(null);
+  const [preview, setPreview] = useState(null);
 
   const [{ isDragging }, drag, previewRef] = useDrag(
     () => ({
@@ -92,7 +97,7 @@ const DraggableListItem = ({ icon, type, isImageUploaded }) => {
     [isImageUploaded]
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isImageUploaded && dragRef.current) {
       html2canvas(dragRef.current, { backgroundColor: null }).then((canvas) => {
         setPreview(canvas.toDataURL());
@@ -127,19 +132,113 @@ const insertNode = (newNode, nodes) => {
   return [...nodes, newNode];
 };
 
+// Popup component
+const Popup = ({ content, onClose }) => {
+  return (
+    <div style={popupStyles.overlay}>
+      <div style={popupStyles.popup}>
+        <button onClick={onClose} style={popupStyles.closeButton}>X</button>
+        <p>Enter the serial Number for {content}:</p>
+        <TextField
+          fullWidth
+          name="serialNO"
+          label="Serial No"
+          autoComplete="off"
+          placeholder="serial no."
+          variant="outlined"
+          style={{ marginBottom: '40px' }}
+        />
+        <Button
+          variant="contained"
+          color="success"
+          type="submit"
+          style={popupStyles.submitButton}
+        >
+          Update
+        </Button>
+        <Button
+          variant="contained"
+          color="error"
+          type="submit"
+          style={popupStyles.deleteButton}
+        >
+          Delete
+        </Button>
+
+      </div>
+    </div>
+  );
+};
+
+const popupStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: '1000'
+  },
+  popup: {
+    background: 'white',
+    padding: '20px',
+    borderRadius: '5px',
+    boxShadow: '0 5px 15px rgba(0,0,0,0.3)',
+    position: 'relative',
+    width: "500px"
+  },
+  closeButton: {
+    position: 'absolute',
+    top: '8px',
+    right: '10px',
+    background: 'red',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '30px',
+    height: '30px',
+    cursor: 'pointer',
+  },
+  submitButton: {
+    position: 'absolute',
+    bottom: '8px',
+    right: '110px'
+  },
+  deleteButton: {
+    position: 'absolute',
+    bottom: '8px',
+    right: '10px'
+  }
+};
+
 function ResponsiveDrawer(props) {
   const { window } = props;
-  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [canvasHeight, setCanvasHeight] = React.useState(
+  const [canvasHeight, setCanvasHeight] = useState(
     window ? window.innerHeight : "100vh"
   );
-  const [isImageUploaded, setIsImageUploaded] = React.useState(false);
+  const [isImageUploaded, setIsImageUploaded] = useState(false);
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
+  const [popupContent, setPopupContent] = useState('');
   const reactFlowInstance = useReactFlow();
 
-  const reactFlowWrapper = React.useRef(null);
+  const reactFlowWrapper = useRef(null);
 
-  React.useEffect(() => {
+  // Counters for naming
+  const [, setCounters] = useState({
+    agent: 1,
+    T: 1,
+    D: 1,
+    M: 1,
+    W: 1
+  });
+
+  useEffect(() => {
     const handleResize = () => {
       setCanvasHeight(window ? window.innerHeight : "100vh");
     };
@@ -158,6 +257,7 @@ function ResponsiveDrawer(props) {
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
+
 
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
@@ -208,6 +308,31 @@ function ResponsiveDrawer(props) {
         y: offset.y - boundingRect.top + 100,
       });
 
+      const getNodeName = (type) => {
+        let name;
+        setCounters((prev) => {
+          const newCounters = { ...prev };
+
+          if (type === "Water leak") {
+            name = `Water_WL${newCounters.W}`;
+            newCounters.W += 1;
+          } else if (type === "Motion") {
+            name = `Motion_M${newCounters.M}`;
+            newCounters.M += 1;
+          } else if (type === "Temp/Humidity") {
+            name = `Temp_T${newCounters.T}`;
+            newCounters.T += 1;
+          } else if (type === "Door") {
+            name = `Door_D${newCounters.D}`;
+            newCounters.D += 1;
+          } else {
+            name = type;
+          }
+          return newCounters;
+        });
+        return name;
+      };
+
       const newNode = {
         id: `device-${new Date().getTime()}`,
         type: "icon",
@@ -215,7 +340,8 @@ function ResponsiveDrawer(props) {
           icon: item.icon,
           width: 60,
           height: 60,
-          type: item.type, // Add the type (name) to the node data
+          type: getNodeName(item.type), // Use the naming convention here
+          onClick: () => handleNodeClick(getCurrentClickingNode(item.type)) // Add click handler
         },
         position: {
           x: reactFlowBounds.x,
@@ -226,6 +352,41 @@ function ResponsiveDrawer(props) {
 
       setNodes((nds) => insertNode(newNode, nds));
     }
+  };
+
+  const getCurrentClickingNode = (type) => {
+    let currentName;
+
+    setCounters((prev) => {
+      const newCounters = { ...prev };
+
+      if (type === "Water leak") {
+        newCounters.W -= 1;
+        currentName = `Water_WL${newCounters.W}`;
+        newCounters.W += 1;
+      } else if (type === "Motion") {
+        newCounters.M -= 1;
+        currentName = `Motion_M${newCounters.M}`;
+        newCounters.M += 1;
+      } else if (type === "Temp/Humidity") {
+        newCounters.T -= 1;
+        currentName = `Temp_T${newCounters.T}`;
+        newCounters.T += 1;
+      } else if (type === "Door") {
+        newCounters.D -= 1;
+        currentName = `Door_D${newCounters.D}`;
+        newCounters.D += 1;
+      } else {
+        currentName = type;
+      }
+      return newCounters;
+    });
+    return currentName
+  }
+
+  const handleNodeClick = (content) => {
+    setPopupContent(content);
+    setIsPopupVisible(true);
   };
 
   const handleNodeDragStop = (event, node) => {
@@ -244,18 +405,18 @@ function ResponsiveDrawer(props) {
         const newNodes = nodes.map((n) =>
           n.id === node.id
             ? {
-                ...n,
-                position: {
-                  x: Math.min(
-                    Math.max(node.position.x, position.x),
-                    position.x + width - node.data.width
-                  ),
-                  y: Math.min(
-                    Math.max(node.position.y, position.y),
-                    position.y + height - node.data.height
-                  ),
-                },
-              }
+              ...n,
+              position: {
+                x: Math.min(
+                  Math.max(node.position.x, position.x),
+                  position.x + width - node.data.width
+                ),
+                y: Math.min(
+                  Math.max(node.position.y, position.y),
+                  position.y + height - node.data.height
+                ),
+              },
+            }
             : n
         );
         setNodes(newNodes);
@@ -425,9 +586,9 @@ function ResponsiveDrawer(props) {
             ref={
               isImageUploaded
                 ? (el) => {
-                    reactFlowWrapper.current = el;
-                    drop(el);
-                  }
+                  reactFlowWrapper.current = el;
+                  drop(el);
+                }
                 : reactFlowWrapper
             }
             style={{
@@ -450,6 +611,7 @@ function ResponsiveDrawer(props) {
           </div>
         </ReactFlowProvider>
       </Box>
+      {isPopupVisible && <Popup content={popupContent} onClose={() => setIsPopupVisible(false)} />}
     </Box>
   );
 }
